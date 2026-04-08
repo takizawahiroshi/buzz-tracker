@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>バズトレンド探知機</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fff;--bg2:#f6f5f2;--bg3:#eeede9;
+  --text:#1a1a1a;--text2:#666;--text3:#999;
+  --border:rgba(0,0,0,0.09);--border2:rgba(0,0,0,0.18);
+  --accent:#2563eb;--accent-bg:#eff6ff;--accent-border:rgba(37,99,235,0.3);
+  --green:#16a34a;--green-bg:#f0fdf4;--green-border:rgba(22,163,74,0.25);
+  --amber:#d97706;--amber-bg:#fffbeb;--amber-border:rgba(217,119,6,0.3);
+  --purple:#7c3aed;--purple-bg:#f5f3ff;--purple-border:rgba(124,58,237,0.3);
+  --red:#dc2626;--red-bg:#fef2f2;
+  --r:8px;--rl:12px
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1e;--bg2:#2c2c2e;--bg3:#3a3a3c;
+  --text:#f0f0f0;--text2:#aaa;--text3:#666;
+  --border:rgba(255,255,255,0.09);--border2:rgba(255,255,255,0.2);
+  --accent:#60a5fa;--accent-bg:rgba(96,165,250,0.12);--accent-border:rgba(96,165,250,0.3);
+  --green:#4ade80;--green-bg:rgba(74,222,128,0.1);--green-border:rgba(74,222,128,0.25);
+  --amber:#fbbf24;--amber-bg:rgba(251,191,36,0.1);--amber-border:rgba(251,191,36,0.3);
+  --purple:#a78bfa;--purple-bg:rgba(167,139,250,0.12);--purple-border:rgba(167,139,250,0.3);
+  --red:#f87171;--red-bg:rgba(220,38,38,0.12)
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;background:var(--bg3);color:var(--text);font-size:13px;line-height:1.6;min-height:100vh}
+
+/* ══ FILE:// BLOCKER OVERLAY ══════════════════════════════════ */
+#file-blocker{
+  display:none;
+  position:fixed;inset:0;z-index:9999;
+  background:rgba(0,0,0,0.65);
+  backdrop-filter:blur(4px);
+  align-items:center;justify-content:center;padding:20px;
+}
+#file-blocker.show{display:flex}
+.fb-card{
+  background:var(--bg);border-radius:16px;
+  max-width:540px;width:100%;padding:32px 36px;
+  box-shadow:0 24px 60px rgba(0,0,0,0.3);
+}
+.fb-icon{font-size:40px;margin-bottom:16px;text-align:center}
+.fb-title{font-size:20px;font-weight:600;text-align:center;margin-bottom:6px}
+.fb-sub{font-size:13px;color:var(--text2);text-align:center;margin-bottom:24px}
+.fb-steps{display:flex;flex-direction:column;gap:14px;margin-bottom:24px}
+.fb-step{display:flex;align-items:flex-start;gap:12px}
+.fb-num{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.fb-step-body{flex:1}
+.fb-step-title{font-size:13px;font-weight:500;margin-bottom:3px}
+.fb-step-detail{font-size:11px;color:var(--text2);line-height:1.6}
+.fb-code{background:var(--bg3);border:.5px solid var(--border2);border-radius:var(--r);padding:8px 12px;font-family:monospace;font-size:12px;color:var(--accent);cursor:pointer;position:relative;margin-top:5px}
+.fb-code:hover{background:var(--bg2)}
+.fb-code-copy{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text3)}
+.fb-divider{height:.5px;background:var(--border);margin:20px 0}
+.fb-alt{font-size:11px;color:var(--text2);text-align:center;line-height:1.6}
+.fb-alt b{color:var(--text)}
+.fb-bat{background:var(--green-bg);border:.5px solid var(--green-border);border-radius:var(--r);padding:10px 14px;margin-top:10px;font-size:11px;color:var(--green)}
+.fb-bat b{font-size:12px;display:block;margin-bottom:3px}
+
+/* ══ MAIN APP ══════════════════════════════════════════════════ */
+#shell{display:grid;grid-template-columns:300px 1fr;min-height:100vh}
+#left{background:var(--bg2);border-right:.5px solid var(--border2);display:flex;flex-direction:column;height:100vh;position:sticky;top:0;overflow:hidden}
+#ls{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:11px}
+#lf{padding:10px 14px 14px;border-top:.5px solid var(--border)}
+#right{padding:16px;overflow-y:auto}
+.sh{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+select,input[type=date]{width:100%;padding:7px 9px;font-size:12px;background:var(--bg);color:var(--text);border:.5px solid var(--border2);border-radius:var(--r);outline:none;appearance:none}
+select:focus,input:focus{border-color:var(--accent)}
+.fl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
+.badge-row{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.ibadge{font-size:10px;font-weight:500;padding:2px 7px;border-radius:8px;background:var(--accent-bg);color:var(--accent);border:.5px solid var(--accent-border)}
+.sbadge{font-size:10px;font-weight:500;padding:2px 7px;border-radius:8px;background:var(--green-bg);color:var(--green);border:.5px solid var(--green-border)}
+.link-btn{font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline}
+.q-list{display:flex;flex-direction:column;gap:3px}
+.qi{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:var(--r);border:.5px solid var(--border);background:var(--bg);cursor:pointer;user-select:none;transition:all .12s}
+.qi:hover{border-color:var(--border2)}.qi.chk{border-color:var(--accent-border);background:var(--accent-bg)}
+.qi input[type=checkbox]{width:12px;height:12px;accent-color:var(--accent);flex-shrink:0}
+.ql{flex:1;font-size:11px;line-height:1.3}.qp{font-size:9px;color:var(--text3);white-space:nowrap}
+.speed-note{font-size:9px;color:var(--text2);margin-top:4px;line-height:1.4}
+#run-btn{width:100%;padding:10px;font-size:13px;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:var(--r);cursor:pointer;transition:opacity .15s}
+#run-btn:hover:not(:disabled){opacity:.88}
+#run-btn:disabled{opacity:.4;cursor:not-allowed}
+.sel-c{font-size:10px;color:var(--text2);text-align:center;margin-top:4px}
+/* dashboard header */
+.dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.dash-title h1{font-size:19px;font-weight:500}
+.dash-title p{font-size:11px;color:var(--text2);margin-top:2px}
+.icon-btn{display:flex;align-items:center;gap:5px;padding:6px 11px;font-size:11px;font-weight:500;background:var(--bg);color:var(--text2);border:.5px solid var(--border2);border-radius:var(--r);cursor:pointer;transition:all .12s;white-space:nowrap}
+.icon-btn:hover{background:var(--bg2);color:var(--text)}
+.icon-btn.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent-border)}
+.key-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
+.key-dot.ok{background:var(--green)}.key-dot.ng{background:var(--red)}
+.div{height:.5px;background:var(--border);margin:10px 0 14px}
+/* API panel */
+#api-panel{display:none;background:var(--bg);border:.5px solid var(--border2);border-radius:var(--rl);margin-bottom:16px;overflow:hidden}
+.ap-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:.5px solid var(--border);background:var(--bg2)}
+.ap-head-left{display:flex;align-items:center;gap:8px}
+.ap-head-icon{width:28px;height:28px;background:var(--amber-bg);border:.5px solid var(--amber-border);border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:14px}
+.ap-head-text .t1{font-size:13px;font-weight:500}.ap-head-text .t2{font-size:10px;color:var(--text2)}
+.ap-body{padding:16px}
+.ap-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.ap-card{background:var(--bg2);border:.5px solid var(--border);border-radius:var(--r);padding:11px 13px}
+.ap-cl{font-size:10px;color:var(--text2);margin-bottom:5px}.ap-cv{font-size:13px;font-weight:500}
+.ap-cv.ok{color:var(--green)}.ap-cv.ng{color:var(--red)}.ap-cv.na{color:var(--text3)}
+.ap-input-row{display:flex;gap:8px;align-items:stretch}
+.ap-input-wrap{flex:1;position:relative}
+.ap-input-wrap input{width:100%;padding:9px 36px 9px 12px;font-size:12px;background:var(--bg);color:var(--text);border:.5px solid var(--border2);border-radius:var(--r);outline:none;font-family:monospace}
+.ap-input-wrap input:focus{border-color:var(--accent)}
+.ap-eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;color:var(--text3);padding:2px}
+.ap-save{padding:0 16px;font-size:12px;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:var(--r);cursor:pointer}
+.ap-save:hover{opacity:.88}
+.ap-note{font-size:10px;color:var(--text2);margin-top:8px;line-height:1.6}
+.ap-note a{color:var(--accent)}
+.ap-div{height:.5px;background:var(--border);margin:14px 0}
+.srv-row{display:flex;align-items:flex-start;gap:8px}
+.srv-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.srv-dot.ok{background:var(--green)}.srv-dot.ng{background:var(--red)}
+.srv-dot.checking{background:var(--amber);animation:pulse .8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.srv-label{font-size:12px;font-weight:500}
+.srv-sub{font-size:10px;color:var(--text2);margin-top:1px}
+/* metrics */
+.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:16px}
+.mc{background:var(--bg2);border-radius:var(--r);padding:9px 11px}
+.ml{font-size:10px;color:var(--text2)}.mv{font-size:16px;font-weight:500;margin-top:2px}
+/* progress */
+#pw{display:none;background:var(--bg);border:.5px solid var(--border);border-radius:var(--rl);padding:16px;margin-bottom:14px}
+#pt{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:3px}
+#pt-note{font-size:10px;color:var(--text3);margin-bottom:12px}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.st2{display:flex;align-items:flex-start;gap:7px;padding:6px 8px;border-radius:var(--r);background:var(--bg2);border:.5px solid var(--border);transition:all .2s}
+.st2.active{border-color:var(--accent-border);background:var(--accent-bg)}
+.st2.done{border-color:var(--green-border);background:var(--green-bg)}
+.si{width:17px;height:17px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;margin-top:1px}
+.si.idle{background:var(--bg3);color:var(--text3);border:.5px solid var(--border2)}
+.si.active{background:var(--accent);color:#fff}.si.done{background:var(--green);color:#fff}
+.st-ti{font-size:10px;font-weight:500}.st-su{font-size:9px;color:var(--text2);margin-top:1px}
+.spin{display:inline-block;width:10px;height:10px;border:1.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.prog-bar-wrap{height:4px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden}
+.prog-bar{height:100%;background:var(--accent);border-radius:2px;transition:width 1s linear}
+#elapsed{font-size:10px;color:var(--text3);margin-top:6px;text-align:center}
+/* tabs */
+.tabs{display:flex;gap:5px;flex-wrap:wrap}
+.tab{padding:4px 11px;font-size:11px;background:transparent;color:var(--text2);border:.5px solid var(--border);border-radius:var(--r);cursor:pointer;transition:all .12s;white-space:nowrap}
+.tab.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent-border)}
+.tab.fc.on{background:var(--purple-bg);color:var(--purple);border-color:var(--purple-border)}
+.cbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+/* cards */
+#cw{display:grid;grid-template-columns:1fr;gap:14px;align-items:start}
+#cw.hd{grid-template-columns:1fr 380px}
+#kg{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+#kg.hd{grid-template-columns:1fr}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.kc{background:var(--bg);border:.5px solid var(--border);border-radius:var(--rl);padding:16px;cursor:pointer;transition:box-shadow .15s,border-color .15s,transform .12s;position:relative;overflow:hidden;animation:cardIn .2s ease both}
+.kc:hover{border-color:var(--border2);box-shadow:0 3px 14px rgba(0,0,0,.09);transform:translateY(-1px)}
+.kc.on{background:var(--accent-bg);border-color:var(--accent-border);box-shadow:0 0 0 2px var(--accent-border)}
+/* rank stripe on left edge */
+.kc-stripe{position:absolute;top:0;left:0;width:4px;height:100%;border-radius:var(--rl) 0 0 var(--rl)}
+.kc-rank{position:absolute;top:8px;left:10px;font-size:10px;font-weight:700;color:var(--text3);min-width:18px;text-align:center}
+.kc-rank.r1{color:#d97706}.kc-rank.r2{color:#9ca3af}.kc-rank.r3{color:#cd7c3a}
+.kc-body{padding-left:22px}
+.kc-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.kc-left{flex:1;min-width:0}
+.kc-right{text-align:right;flex-shrink:0;margin-left:12px}
+.ktit{font-size:15px;font-weight:600;line-height:1.3;margin-bottom:4px}
+.kc-tags{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:2px}
+.kmeta{font-size:10px;color:var(--text3);margin-top:2px}
+.kc-trend{font-size:12px;font-weight:700;line-height:1}
+.kc-sig{font-size:9px;margin-top:2px;font-weight:500}
+/* buzz bar */
+.kc-bar-wrap{margin:10px 0 8px}
+.kc-bar-label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.kc-bar-name{font-size:10px;color:var(--text2)}
+.kc-bar-val{font-size:14px;font-weight:700;color:var(--text)}
+.bb{width:100%;height:7px;background:var(--border);border-radius:4px;overflow:hidden}
+.bf{height:100%;border-radius:4px;transition:width .6s ease}
+/* bottom stats row */
+.kc-stats{display:flex;justify-content:space-between;align-items:center;padding-top:9px;border-top:.5px solid var(--border)}
+.kc-stat-item{display:flex;flex-direction:column;align-items:center;gap:1px}
+.kc-stat-label{font-size:9px;color:var(--text3)}
+.kc-stat-val{font-size:11px;font-weight:600;color:var(--text)}
+.kc-fc-val{font-size:11px;font-weight:600;color:var(--purple)}
+.tag{display:inline-block;font-size:9px;font-weight:600;padding:2px 7px;border-radius:9px}
+.up{color:var(--green);font-size:12px;font-weight:700}.dn{color:var(--red);font-size:12px;font-weight:700}.nt{color:var(--text3);font-size:10px}
+.rbadge{font-size:9px;padding:1px 6px;border-radius:7px;background:var(--green-bg);color:var(--green);border:.5px solid var(--green-border);vertical-align:middle;display:inline-block}
+#dp{display:none;background:var(--bg);border:.5px solid var(--border2);border-radius:var(--rl);padding:14px;position:sticky;top:14px;max-height:90vh;overflow-y:auto}
+.slab{font-size:10px;font-weight:600;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+.src{border:.5px solid var(--border);border-radius:var(--r);padding:8px 10px;margin-bottom:5px}
+.sl{color:var(--accent);font-size:10px;text-decoration:none;word-break:break-all}.sl:hover{text-decoration:underline}
+.fc-wrap{margin:8px 0}
+.fc-info{background:var(--purple-bg);border:.5px solid var(--purple-border);border-radius:var(--r);padding:8px 10px;margin-top:7px}
+.fi-ti{font-size:10px;font-weight:600;color:var(--purple);margin-bottom:4px}
+.fi-r{display:flex;justify-content:space-between;font-size:10px;padding:2px 0}.fi-v{font-weight:600}
+/* viz/stats */
+#viz-view{display:none}#forecast-view{display:none}#stats-view{display:none}
+.sc{background:var(--bg);border:.5px solid var(--border);border-radius:var(--rl);padding:14px;margin-bottom:12px}
+.sc-title{font-size:12px;font-weight:500;color:var(--text);margin-bottom:12px}
+.hb-row{margin-bottom:6px}.hb-lr{display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px}
+.hb-bg{height:5px;background:var(--border);border-radius:3px;overflow:hidden}.hb-fill{height:100%;border-radius:3px;transition:width .5s}
+.cloud-wrap{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0}
+.hm-table{width:100%;border-collapse:separate;border-spacing:3px;font-size:10px}
+.hm-td{text-align:center;border-radius:4px;padding:4px 2px}
+#empty{text-align:center;padding:50px 20px;border:.5px dashed var(--border2);border-radius:var(--rl);color:var(--text2)}
+#err{display:none;border-radius:var(--r);margin-bottom:12px;padding:12px 14px;font-size:12px;line-height:1.6}
+#err.timeout{background:var(--amber-bg);color:var(--amber);border:.5px solid var(--amber-border)}
+#err.general{background:var(--red-bg);color:var(--red);border:.5px solid rgba(220,38,38,.25)}
+#res{display:none}
+.fc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:8px}
+.fc-card{background:var(--bg);border:.5px solid var(--border);border-radius:var(--rl);padding:12px 14px}
+.fc-card.top3{border-color:var(--purple-border);background:var(--purple-bg)}
+.fc-bar-bg{height:4px;background:var(--border);border-radius:2px;margin-top:4px}
+.fc-bar-fill{height:100%;border-radius:2px;background:var(--purple);transition:width .5s}
+@media(max-width:800px){#shell{grid-template-columns:1fr}#left{position:static;height:auto}.metrics{grid-template-columns:repeat(3,1fr)}#cw.hd{grid-template-columns:1fr}.sg{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- ══ FILE:// BLOCKER ════════════════════════════════════════ -->
+<div id="file-blocker">
+  <div class="fb-card">
+    <div class="fb-icon">🚫</div>
+    <div class="fb-title">直接開けません</div>
+    <div class="fb-sub">
+      ブラウザのセキュリティにより、<code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-family:monospace;font-size:11px">file://</code> からAPIへの接続はブロックされます。<br>
+      以下の手順で起動してください。
+    </div>
+
+    <div class="fb-steps">
+      <div class="fb-step">
+        <div class="fb-num">1</div>
+        <div class="fb-step-body">
+          <div class="fb-step-title">server.py と buzz_tracker.html を同じフォルダに置く</div>
+          <div class="fb-step-detail">両ファイルを同じディレクトリに保存してください。<br>例: <code style="font-family:monospace">C:\Users\name\buzz-tracker\</code></div>
+        </div>
+      </div>
+
+      <div class="fb-step">
+        <div class="fb-num">2</div>
+        <div class="fb-step-body">
+          <div class="fb-step-title">コマンドプロンプトでサーバーを起動</div>
+          <div class="fb-step-detail">
+            <b>Windows — そのフォルダで右クリック →「ターミナルで開く」</b><br>
+            または <code style="font-family:monospace">cd</code> でフォルダに移動してから:
+          </div>
+          <div class="fb-code" onclick="copyCmd(this)" title="クリックでコピー">
+            python server.py sk-ant-api03-XXXXXXXX
+            <span class="fb-code-copy">クリックでコピー</span>
+          </div>
+          <div class="fb-step-detail" style="margin-top:6px">
+            ※ <code style="font-family:monospace">sk-ant-api03-XXXXXXXX</code> の部分は実際のAPIキーに置き換えてください
+          </div>
+        </div>
+      </div>
+
+      <div class="fb-step">
+        <div class="fb-num">3</div>
+        <div class="fb-step-body">
+          <div class="fb-step-title">ブラウザで localhost:8000 を開く</div>
+          <div class="fb-step-detail">サーバーが起動したら、このURLをブラウザで開いてください:</div>
+          <div class="fb-code" onclick="copyUrl(this)" title="クリックでコピー">
+            http://localhost:8000
+            <span class="fb-code-copy">クリックでコピー</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fb-divider"></div>
+
+    <div class="fb-alt">
+      <b>簡単起動 (Windows):</b> ダウンロードした <code style="font-family:monospace">start.bat</code> をダブルクリック<br>
+      → APIキーを入力するだけで自動起動＆ブラウザが開きます
+    </div>
+
+    <div class="fb-bat">
+      <b>🔑 APIキーの取得先</b>
+      <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--green)">console.anthropic.com/settings/keys</a> でAPIキーを作成してください
+    </div>
+  </div>
+</div>
+
+<!-- ══ MAIN APP ════════════════════════════════════════════════ -->
+<div id="shell">
+
+<!-- LEFT -->
+<div id="left">
+<div id="ls">
+  <div>
+    <div style="font-size:15px;font-weight:500">バズトレンド探知機</div>
+    <div style="font-size:11px;color:var(--text2)">TimesFM予測 × 多角可視化</div>
+  </div>
+  <div><div class="sh">業界</div>
+    <select id="si" onchange="updateSub()">
+      <option value="">── 業界を選択 ──</option>
+      <option value="it">IT・テクノロジー</option><option value="finance">金融・経済</option>
+      <option value="healthcare">医療・ヘルスケア</option><option value="entertainment">エンタメ・メディア</option>
+      <option value="food">食品・飲食</option><option value="fashion">ファッション・美容</option>
+      <option value="sports">スポーツ・フィットネス</option><option value="politics">政治・社会・公共</option>
+      <option value="environment">環境・エネルギー</option><option value="education">教育・キャリア</option>
+      <option value="travel">旅行・観光・ホテル</option><option value="gaming">ゲーム・アニメ・漫画</option>
+      <option value="real_estate">不動産・建設</option><option value="auto">自動車・モビリティ</option>
+      <option value="retail">小売・EC・流通</option>
+    </select>
+  </div>
+  <div><div class="sh">業種</div>
+    <select id="ss" disabled onchange="updateBadges()"><option value="">── 先に業界を選択 ──</option></select>
+    <div class="badge-row" id="badges"></div>
+  </div>
+  <div><div class="sh">地域</div>
+    <select id="sr">
+      <option value="all">全世界</option><option value="japan">日本</option><option value="asia">アジア</option>
+      <option value="usa">北米</option><option value="europe">欧州</option><option value="africa">アフリカ</option>
+      <option value="latam">南米・中南米</option><option value="oceania">オセアニア</option>
+    </select>
+  </div>
+  <div><div class="sh">期間</div>
+    <select id="sp" onchange="toggleCD()">
+      <option value="7">直近7日間</option><option value="14">直近14日間</option>
+      <option value="30">直近30日間</option><option value="90">直近3ヶ月</option><option value="custom">カスタム</option>
+    </select>
+    <div id="cd" style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:5px">
+      <div><label class="fl">開始日</label><input type="date" id="df"></div>
+      <div><label class="fl">終了日</label><input type="date" id="dt"></div>
+    </div>
+  </div>
+  <div>
+    <div class="sh" style="margin-bottom:5px">検索クエリ（15件）</div>
+    <div class="speed-note">⚡ 推奨: 3〜5件（多いほど時間がかかります）</div>
+    <div style="display:flex;gap:8px;margin:5px 0">
+      <button class="link-btn" onclick="checkAll(true)">すべて選択</button>
+      <button class="link-btn" onclick="checkAll(false)">すべて解除</button>
+    </div>
+    <div class="q-list" id="ql"></div>
+  </div>
+</div>
+<div id="lf">
+  <button id="run-btn" onclick="run()">検索して分析する →</button>
+  <div class="sel-c" id="sc2"></div>
+</div>
+</div>
+
+<!-- RIGHT -->
+<div id="right">
+  <div class="dash-header">
+    <div class="dash-title">
+      <h1>トレンド分析 + バズ予測</h1>
+      <p id="rsub">業界・業種・地域・期間を設定して検索してください</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div id="srv-chip" style="font-size:10px;padding:3px 9px;border-radius:6px;background:var(--bg2);color:var(--text3);border:.5px solid var(--border)">接続確認中...</div>
+      <button class="icon-btn" id="settings-btn" onclick="toggleApiPanel()">
+        <span id="key-dot" class="key-dot ng"></span>
+        <span id="key-btn-label">⚙ API設定</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- API Key Panel -->
+  <div id="api-panel">
+    <div class="ap-head">
+      <div class="ap-head-left">
+        <div class="ap-head-icon">🔑</div>
+        <div class="ap-head-text"><div class="t1">API設定 / ダッシュボード</div><div class="t2">APIキーとサーバー接続状態を管理</div></div>
+      </div>
+      <button onclick="toggleApiPanel()" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:4px">×</button>
+    </div>
+    <div class="ap-body">
+      <div class="ap-grid">
+        <div class="ap-card"><div class="ap-cl">APIキー状態</div><div class="ap-cv" id="ap-key-st">未設定</div></div>
+        <div class="ap-card"><div class="ap-cl">マスク済みキー</div><div class="ap-cv na" id="ap-key-mask" style="font-family:monospace;font-size:11px">—</div></div>
+        <div class="ap-card"><div class="ap-cl">プロキシサーバー</div><div class="ap-cv" id="ap-srv-st">確認中...</div></div>
+        <div class="ap-card"><div class="ap-cl">実行環境</div><div class="ap-cv na" id="ap-env">—</div></div>
+      </div>
+      <label class="fl" style="font-size:11px;font-weight:500;color:var(--text);margin-bottom:8px;display:block">Anthropic APIキーを入力</label>
+      <div class="ap-input-row">
+        <div class="ap-input-wrap">
+          <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." autocomplete="off" oninput="onKeyInput()" onkeydown="if(event.key==='Enter')saveApiKey()">
+          <button class="ap-eye" onclick="toggleKeyVis()">👁</button>
+        </div>
+        <button class="ap-save" onclick="saveApiKey()">保存</button>
+      </div>
+      <div class="ap-note">APIキーは <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a> で取得。ページ内メモリのみ保持、外部送信なし。</div>
+      <div class="ap-div"></div>
+      <div style="font-size:11px;font-weight:500;margin-bottom:8px">サーバー接続状態</div>
+      <div class="srv-row">
+        <div class="srv-dot checking" id="srv-dot2"></div>
+        <div><div class="srv-label" id="srv-label2">確認中...</div><div class="srv-sub" id="srv-sub2"></div></div>
+      </div>
+      <div id="srv-guide2" style="display:none;background:var(--bg3);border-radius:var(--r);padding:10px 12px;margin-top:10px;font-size:10px;color:var(--text2);line-height:1.8">
+        <b>起動方法:</b><br>
+        <code style="background:var(--bg);padding:2px 6px;border-radius:3px;font-family:monospace;border:.5px solid var(--border2)">python server.py sk-ant-YOUR_KEY</code><br>
+        その後 <code style="background:var(--bg);padding:2px 6px;border-radius:3px;font-family:monospace;border:.5px solid var(--border2)">http://localhost:8000</code> をブラウザで開く
+      </div>
+    </div>
+  </div>
+
+  <div class="div"></div>
+  <div id="err"></div>
+
+  <div id="pw">
+    <div id="pt">検索中...</div>
+    <div id="pt-note"></div>
+    <div class="sg" id="sg"></div>
+    <div class="prog-bar-wrap"><div class="prog-bar" id="progbar" style="width:0%"></div></div>
+    <div id="elapsed"></div>
+  </div>
+
+  <div id="empty">
+    <div style="font-size:28px;margin-bottom:10px">◎</div>
+    <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:5px">左パネルで条件を設定して検索開始</div>
+    <div style="font-size:11px;margin-bottom:3px">X・Google Trends・Reddit・YouTube・TikTok・国内外ニュースを横断検索</div>
+    <div style="font-size:11px;color:var(--text3)">TimesFM予測 + 期間・地域・ボリューム・キーワード等を多角可視化</div>
+  </div>
+
+  <div id="res">
+    <div class="metrics" id="mrow"></div>
+    <div class="cbar">
+      <div class="tabs">
+        <button class="tab on" id="tb-cards" onclick="sv('cards')">カード</button>
+        <button class="tab fc" id="tb-forecast" onclick="sv('forecast')">⬡ バズ予測</button>
+        <button class="tab" id="tb-viz" onclick="sv('viz')">📊 可視化</button>
+        <button class="tab" id="tb-stats" onclick="sv('stats')">統計</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:10px;color:var(--text2)">並び:</span>
+        <button class="tab on" id="so-buzz" onclick="ss3('buzz')">バズ順</button>
+        <button class="tab" id="so-trend" onclick="ss3('trend')">急上昇順</button>
+        <button class="tab" id="so-fc" onclick="ss3('forecast')">予測順</button>
+        <span id="sort-note" style="font-size:10px;color:var(--accent);font-weight:500;transition:opacity .5s;opacity:0;margin-left:4px"></span>
+      </div>
+    </div>
+    <div id="cards-view"><div id="cw"><div id="kg"></div><div id="dp"></div></div></div>
+    <div id="forecast-view">
+      <div style="background:var(--purple-bg);border:.5px solid var(--purple-border);border-radius:var(--rl);padding:11px 13px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:600;color:var(--purple);margin-bottom:3px">TimesFM 時系列予測モデル</div>
+        <div style="font-size:10px;color:var(--text2);line-height:1.7">パッチ分解 → 線形トレンド推定 → P10/P25/P75/P90 分位数予測（信頼区間は √horizon で拡大）</div>
+      </div>
+      <div class="fc-grid" id="fc-grid"></div>
+    </div>
+    <div id="viz-view">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="sc" id="v-timeline"></div><div class="sc" id="v-region"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="sc" id="v-volume"></div><div class="sc" id="v-platform"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="sc" id="v-cloud"></div><div class="sc" id="v-scatter"></div>
+      </div>
+      <div class="sc" id="v-heatmap"></div>
+    </div>
+    <div id="stats-view">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="sc" id="s-region"></div><div class="sc" id="s-ind"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="sc" id="s-plat"></div><div class="sc" id="s-tdist"></div>
+      </div>
+      <div class="sc" id="s-top10"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// ═══ TimesFM ══════════════════════════════════════════════════
+const TFM={
+  patch(s,ps=2){const p=[];for(let i=0;i+ps<=s.length;i+=ps)p.push(s.slice(i,i+ps).reduce((a,b)=>a+b)/ps);return p.length?p:[s[s.length-1]||0]},
+  linTrend(p){const n=p.length;if(n<2)return{slope:0,intercept:p[0]||0};const mx=p.reduce((_,__,i)=>_+i,0)/n,my=p.reduce((a,b)=>a+b)/n;const num=p.reduce((s,v,i)=>s+(i-mx)*(v-my),0),den=p.reduce((s,_,i)=>s+(i-mx)**2,0)||1;const sl=num/den;return{slope:sl,intercept:my-sl*mx}},
+  resStd(p,sl,ic){const r=p.map((v,i)=>v-(ic+sl*i));return Math.sqrt(r.reduce((s,x)=>s+x*x,0)/Math.max(r.length,1))},
+  momentum(s,w=3){if(s.length<2)return 0;const r=s.slice(-w);let d=0;for(let i=1;i<r.length;i++)d+=r[i]-r[i-1];return d/(r.length-1)},
+  decay(tp){return tp>50?.97:tp>10?.94:tp>-10?.90:.82},
+  forecast(series,tp,hz=14,ps=2){
+    if(!series||series.length<2)return[];
+    const nm=Math.max(...series)||1,no=series.map(v=>v/nm);
+    const pa=this.patch(no,ps),{slope:sl,intercept:ic}=this.linTrend(pa);
+    const std=this.resStd(pa,sl,ic),mom=this.momentum(no),dec=this.decay(tp),last=no[no.length-1],tps=sl/ps;
+    return Array.from({length:hz},(_,i)=>{
+      const h=i+1,tr=last+tps*h,mo=last+mom*h,dc=last*Math.pow(dec,h),mn=tr*.4+mo*.3+dc*.3,unc=std*Math.sqrt(h)*.9;
+      return{h,mean:Math.max(0,mn)*nm,p10:Math.max(0,mn-1.28*unc)*nm,p25:Math.max(0,mn-.674*unc)*nm,p75:Math.max(0,mn+.674*unc)*nm,p90:Math.max(0,mn+1.28*unc)*nm};
+    })},
+  fcScore(s,tp){const f=this.forecast(s,tp,7);return f.length?Math.round(f.reduce((a,b)=>a+b.mean,0)/f.length):0},
+  peak(fc){if(!fc.length)return null;let mx=0;fc.forEach((f,i)=>{if(f.mean>fc[mx].mean)mx=i});return{day:fc[mx].h,value:Math.round(fc[mx].mean)}},
+  signal(s,tp){const f=this.forecast(s,tp,7);if(!f.length)return{label:"不明",color:"#888"};const lv=s[s.length-1]||1,avg=f.reduce((a,b)=>a+b.mean,0)/f.length,r=avg/lv;
+    if(r>1.3)return{label:"急拡大予測",color:"#7c3aed"};if(r>1.05)return{label:"上昇継続",color:"#16a34a"};if(r>0.9)return{label:"横ばい維持",color:"#d97706"};if(r>0.7)return{label:"減衰傾向",color:"#f97316"};return{label:"急速減衰",color:"#dc2626"}}
+};
+
+const SM={
+  it:["AI・機械学習","生成AI・LLM","クラウド・インフラ","スマートフォン・デバイス","SaaS・B2Bソフト","セキュリティ・サイバー","Web3・ブロックチェーン","IoT・ロボット","半導体・ハードウェア","5G・通信","フィンテック","AR・VR・メタバース"],
+  finance:["株式・投資信託","仮想通貨・NFT","銀行・ネット銀行","保険","FX・コモディティ","スタートアップ・VC","M&A・企業買収","経済指標・マクロ","税制・規制","BNPL・ペイメント"],
+  healthcare:["製薬・創薬","バイオテク・遺伝子","医療機器・診断","病院・クリニック","美容医療・整形","メンタルヘルス","ヘルスケアアプリ","栄養・サプリメント","介護・高齢者ケア","医療AI"],
+  entertainment:["映画・ドラマ","音楽・アーティスト","YouTube・動画配信","ポッドキャスト","書籍・電子書籍","漫画・ライトノベル","テレビ・ラジオ","ライブ・フェス","アイドル・芸能","お笑い・バラエティ"],
+  food:["レストラン・カフェ","ファストフード","グルメ・料理レシピ","お酒・クラフトビール","健康食品","デリバリー","スイーツ・パン","コーヒー・お茶","食の安全","農業・食品テック"],
+  fashion:["レディースファッション","メンズファッション","ラグジュアリー","スニーカー・シューズ","スキンケア・化粧品","ヘアケア","ネイル・まつエク","プチプラ","サステナブル","インフルエンサーコスメ"],
+  sports:["サッカー・Jリーグ","野球・NPB・MLB","バスケ・NBA","テニス・ゴルフ","格闘技・MMA","陸上・マラソン","フィットネス・ジム","アウトドア","eスポーツ","オリンピック"],
+  politics:["国内政治・選挙","外交・国際","経済政策","社会問題","災害・防災","犯罪・司法","移民・難民","デモ・社会運動","地方行政","公衆衛生"],
+  environment:["気候変動","再生可能エネルギー","EV・電気自動車","脱炭素","プラスチック","生物多様性","水問題","核エネルギー","ESG投資","環境規制"],
+  education:["受験・進学","EdTech","語学・英語","プログラミング教育","キャリア・転職","副業・フリーランス","資格・スキルアップ","大学・高等教育","子育て・育児","リスキリング"],
+  travel:["国内旅行","海外旅行","ホテル・旅館","航空・LCC","クルーズ","バックパッカー","ワーケーション","インバウンド","テーマパーク","グランピング"],
+  gaming:["スマホゲーム","PCゲーム","アニメ・新作","声優・キャラ","VTuber","コスプレ","同人・創作","任天堂IP","ガチャ・課金","ゲーム実況"],
+  real_estate:["マンション・購入","不動産投資","賃貸・引越し","リノベーション","建設・ゼネコン","スマートホーム","地価・土地","商業不動産","海外不動産","不動産テック"],
+  auto:["新車・EV","カーシェア","自動運転","バイク・原付","中古車","カーパーツ","モータースポーツ","物流・トラック","マイクロモビリティ","充電インフラ"],
+  retail:["EC・通販","スーパー・コンビニ","ドラッグストア","百貨店","D2Cブランド","フリマ・リユース","サブスク","PB商品","オムニチャネル","物流"]
+};
+const QD=[
+  {id:"q01",pl:"X / Twitter",  la:"X トレンドハッシュタグ",               on:true},
+  {id:"q02",pl:"Google Trends",la:"Google Trends 急上昇キーワード",        on:true},
+  {id:"q03",pl:"Reddit",       la:"Reddit バイラルスレッド",               on:false},
+  {id:"q04",pl:"YouTube",      la:"YouTube 急上昇動画・チャンネル",        on:true},
+  {id:"q05",pl:"TikTok",       la:"TikTok ハッシュタグ・バイラル",         on:false},
+  {id:"q06",pl:"Instagram",    la:"Instagram リール・ハッシュタグ",        on:false},
+  {id:"q07",pl:"国内ニュース", la:"国内ニュース（Yahoo・NHK・日経）",      on:true},
+  {id:"q08",pl:"海外ニュース", la:"海外英語圏ニュース（BBC・CNN等）",      on:false},
+  {id:"q09",pl:"Weibo/抖音",   la:"中国SNS（微博・抖音）トレンド",          on:false},
+  {id:"q10",pl:"海外ニュース", la:"アジア圏ニュース（韓・印・東南アジア）", on:false},
+  {id:"q11",pl:"海外ニュース", la:"欧州ニュース（英・独・仏）",             on:false},
+  {id:"q12",pl:"海外ニュース", la:"中南米・アフリカ・中東ニュース",         on:false},
+  {id:"q13",pl:"Google Trends",la:"Google 検索ボリューム推移・比較",        on:false},
+  {id:"q14",pl:"専門メディア", la:"業界専門メディア・企業ブログ・IR",       on:false},
+  {id:"q15",pl:"公式・政府",   la:"政府統計・公式発表・プレスリリース",     on:false},
+];
+const RC={"日本":"#e05c5c","アジア":"#e07c3a","北米":"#2563eb","欧州":"#7c3aed","アフリカ":"#16a34a","南米・中南米":"#d97706","全世界":"#888","オセアニア":"#0891b2"};
+const PC={"X":"#1d9bf0","Twitter":"#1d9bf0","Google Trends":"#ea4335","Reddit":"#ff4500","YouTube":"#ff0000","TikTok":"#2d2d2d","Instagram":"#c13584","Weibo":"#df2029","国内ニュース":"#2563eb","海外ニュース":"#7c3aed","専門メディア":"#0891b2","公式・政府":"#16a34a"};
+const PAL=["#2563eb","#7c3aed","#e05c5c","#16a34a","#d97706","#0891b2","#e07c3a","#c13584","#ff4500","#ea4335","#1d9bf0","#6366f1","#f59e0b","#10b981","#ef4444","#8b5cf6","#06b6d4","#84cc16","#f97316","#64748b"];
+
+let API_KEY="", DATA=[], sortK="buzz", curView="cards", selKw=null;
+let stepS={}, stepD={}, elapsedTimer=null, progTimer=null;
+let apiPanelOpen=false;
+
+// ══ file:// detection ════════════════════════════════════════
+function isFileProtocol(){ return location.protocol === "file:"; }
+function isLocalhost(){ return ["localhost","127.0.0.1","0.0.0.0"].includes(location.hostname); }
+
+function copyCmd(el){
+  navigator.clipboard.writeText("python server.py sk-ant-api03-XXXXXXXX").catch(()=>{});
+  el.querySelector(".fb-code-copy").textContent = "✓ コピーしました";
+  setTimeout(()=>{ el.querySelector(".fb-code-copy").textContent = "クリックでコピー"; }, 2000);
+}
+function copyUrl(el){
+  navigator.clipboard.writeText("http://localhost:8000").catch(()=>{});
+  el.querySelector(".fb-code-copy").textContent = "✓ コピーしました";
+  setTimeout(()=>{ el.querySelector(".fb-code-copy").textContent = "クリックでコピー"; }, 2000);
+}
+
+// ══ Init ═════════════════════════════════════════════════════
+window.addEventListener("DOMContentLoaded", ()=>{
+  if(isFileProtocol()){
+    document.getElementById("file-blocker").classList.add("show");
+    document.getElementById("run-btn").disabled = true;
+    return;
+  }
+  updateKeyUI();
+  checkServerStatus();
+});
+
+// ══ API key panel ════════════════════════════════════════════
+function toggleApiPanel(){
+  apiPanelOpen=!apiPanelOpen;
+  document.getElementById("api-panel").style.display=apiPanelOpen?"block":"none";
+  document.getElementById("settings-btn").classList.toggle("active",apiPanelOpen);
+  if(apiPanelOpen) checkServerStatus();
+}
+function onKeyInput(){
+  const v=document.getElementById("api-key-input").value.trim();
+  document.getElementById("api-key-input").style.borderColor=v.length>0?(v.startsWith("sk-ant-")?"var(--green)":"var(--red)"):"";
+}
+function toggleKeyVis(){const i=document.getElementById("api-key-input");i.type=i.type==="password"?"text":"password";}
+function saveApiKey(){
+  const v=document.getElementById("api-key-input").value.trim();
+  if(!v){alert("APIキーを入力してください");return;}
+  if(!v.startsWith("sk-ant-")){alert("正しいAnthropicのAPIキーを入力してください（sk-ant-...で始まります）");return;}
+  API_KEY=v; updateKeyUI();
+  setTimeout(()=>{apiPanelOpen=false;document.getElementById("api-panel").style.display="none";document.getElementById("settings-btn").classList.remove("active");},500);
+}
+function updateKeyUI(){
+  const ok=!!API_KEY;
+  document.getElementById("key-dot").className="key-dot "+(ok?"ok":"ng");
+  document.getElementById("key-btn-label").textContent=ok?"⚙ API設定済み":"⚙ API設定";
+  document.getElementById("ap-key-st").textContent=ok?"✓ 設定済み":"未設定";
+  document.getElementById("ap-key-st").className="ap-cv "+(ok?"ok":"ng");
+  document.getElementById("ap-key-mask").textContent=ok?API_KEY.slice(0,12)+"..."+API_KEY.slice(-4):"—";
+}
+async function checkServerStatus(){
+  const chip=document.getElementById("srv-chip"),dot=document.getElementById("srv-dot2"),lbl=document.getElementById("srv-label2"),sub=document.getElementById("srv-sub2"),guide=document.getElementById("srv-guide2");
+  document.getElementById("ap-env").textContent=isLocalhost()?"ローカル (localhost)":"Claude.ai / Webサーバー";
+  if(!isLocalhost()){
+    chip.textContent="✓ 接続OK";chip.style.background="var(--green-bg)";chip.style.color="var(--green)";chip.style.borderColor="var(--green-border)";
+    dot.className="srv-dot ok";lbl.textContent="Claude.ai 環境で動作中";sub.textContent="";guide.style.display="none";
+    document.getElementById("ap-srv-st").textContent="✓ 接続OK";document.getElementById("ap-srv-st").className="ap-cv ok";return;
+  }
+  dot.className="srv-dot checking";lbl.textContent="確認中...";sub.textContent="";chip.textContent="接続確認中...";
+  try{
+    await fetch("/proxy",{method:"OPTIONS",signal:AbortSignal.timeout(3000)});
+    chip.textContent="✓ サーバー接続OK";chip.style.background="var(--green-bg)";chip.style.color="var(--green)";chip.style.borderColor="var(--green-border)";
+    dot.className="srv-dot ok";lbl.textContent="プロキシサーバー接続OK";sub.textContent="localhost:8000 で動作中";guide.style.display="none";
+    document.getElementById("ap-srv-st").textContent="✓ 接続OK";document.getElementById("ap-srv-st").className="ap-cv ok";
+  }catch(e){
+    chip.textContent="✗ サーバー未起動";chip.style.background="var(--red-bg)";chip.style.color="var(--red)";chip.style.borderColor="rgba(220,38,38,.3)";
+    dot.className="srv-dot ng";lbl.textContent="サーバーに接続できません";sub.textContent="server.py を起動してください";guide.style.display="block";
+    document.getElementById("ap-srv-st").textContent="✗ 未起動";document.getElementById("ap-srv-st").className="ap-cv ng";
+  }
+}
+
+// ══ Sub-industry ═════════════════════════════════════════════
+function updateSub(){
+  const v=document.getElementById("si").value,sel=document.getElementById("ss"),subs=SM[v]||[];
+  if(!v||!subs.length){sel.disabled=true;sel.innerHTML='<option value="">── 先に業界を選択 ──</option>';updateBadges();return;}
+  sel.disabled=false;sel.innerHTML='<option value="all">すべての業種</option>'+subs.map(s=>`<option value="${s}">${s}</option>`).join("");updateBadges();
+}
+function updateBadges(){
+  const i=document.getElementById("si").selectedOptions[0],s=document.getElementById("ss").selectedOptions[0];
+  let h="";if(i&&i.value)h+=`<span class="ibadge">${i.text}</span>`;if(s&&s.value&&s.value!=="all")h+=`<span class="sbadge">▸ ${s.text}</span>`;
+  document.getElementById("badges").innerHTML=h;
+}
+function toggleCD(){document.getElementById("cd").style.display=document.getElementById("sp").value==="custom"?"grid":"none";}
+function initQL(){
+  document.getElementById("ql").innerHTML=QD.map(q=>`<label class="qi${q.on?" chk":""}" id="qi-${q.id}"><input type="checkbox" id="${q.id}" ${q.on?"checked":""} onchange="onChk('${q.id}')"><div class="ql">${q.la}</div><div class="qp">${q.pl}</div></label>`).join("");updSC2();
+}
+function onChk(id){const q=QD.find(q=>q.id===id);q.on=document.getElementById(id).checked;document.getElementById("qi-"+id).classList.toggle("chk",q.on);updSC2();}
+function checkAll(v){QD.forEach(q=>{q.on=v;document.getElementById(q.id).checked=v;document.getElementById("qi-"+q.id).classList.toggle("chk",v)});updSC2();}
+function updSC2(){document.getElementById("sc2").textContent=QD.filter(q=>q.on).length+" / 15 クエリ選択中";}
+initQL();
+
+// ══ Render ═══════════════════════════════════════════════════
+function tb(v){if(v>0)return`<span class="up">↑ ${v}%</span>`;if(v<0)return`<span class="dn">↓ ${Math.abs(v)}%</span>`;return`<span class="nt">—</span>`;}
+function sparkSVG(data,color,W=68,H=22){if(!data||data.length<2)return"";const mx=Math.max(...data),mn=Math.min(...data),r=mx-mn||1;const pts=data.map((v,i)=>`${(i/(data.length-1))*W},${H-((v-mn)/r)*(H-4)-2}`).join(" ");return`<svg width="${W}" height="${H}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/></svg>`;}
+function buzzBar(val,max,color){const p=Math.round((val/(max||1))*100);return`<div style="display:flex;align-items:center;gap:6px;margin-top:4px"><div class="bb"><div class="bf" style="width:${p}%;background:${color}"></div></div><span style="font-size:10px;color:var(--text2);min-width:34px;text-align:right">${val.toLocaleString()}</span></div>`;}
+function fcSVG(kw,W=320,H=100){
+  const hist=kw.sparkline||[],fc=TFM.forecast(hist,kw.trendPct||0,14);if(!hist.length)return'<div style="font-size:10px;color:var(--text2)">データ不足</div>';
+  const all=[...hist,...fc.map(f=>f.p90)],maxV=Math.max(...all)*1.12||1,pad={t:8,r:8,b:24,l:32},cW=W-pad.l-pad.r,cH=H-pad.t-pad.b,tot=hist.length+fc.length;
+  const px=i=>pad.l+(i/(tot-1))*cW,py=v=>pad.t+cH-(v/maxV)*cH,fx=px(hist.length-1),lv=hist[hist.length-1];
+  const p90=`${fx},${py(lv)} `+fc.map((f,i)=>`${px(hist.length+i)},${py(f.p90)}`).join(" ");
+  const p10=fc.map((f,i)=>`${px(hist.length+i)},${py(f.p10)}`).reverse().join(" ")+` ${fx},${py(lv)}`;
+  const p75=`${fx},${py(lv)} `+fc.map((f,i)=>`${px(hist.length+i)},${py(f.p75)}`).join(" ");
+  const p25=fc.map((f,i)=>`${px(hist.length+i)},${py(f.p25)}`).reverse().join(" ")+` ${fx},${py(lv)}`;
+  const hl=hist.map((v,i)=>`${px(i)},${py(v)}`).join(" "),fl=`${fx},${py(lv)} `+fc.map((f,i)=>`${px(hist.length+i)},${py(f.mean)}`).join(" ");
+  const yt=[0,.5,1].map(r=>{const v=r*maxV;return`<text x="${pad.l-3}" y="${py(v)+3}" text-anchor="end" font-size="8" fill="currentColor" opacity=".4">${Math.round(v/1000)}k</text><line x1="${pad.l}" y1="${py(v)}" x2="${pad.l+cW}" y2="${py(v)}" stroke="currentColor" stroke-width=".4" opacity=".1"/>`}).join("");
+  return`<svg viewBox="0 0 ${W} ${H}" width="100%" style="overflow:visible">${yt}<polygon points="${p90} ${p10}" fill="#7c3aed" opacity=".1"/><polygon points="${p75} ${p25}" fill="#7c3aed" opacity=".18"/><line x1="${fx}" y1="${pad.t}" x2="${fx}" y2="${pad.t+cH}" stroke="#a78bfa" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/><polyline points="${hl}" fill="none" stroke="#2563eb" stroke-width="2" stroke-linejoin="round"/><polyline points="${fl}" fill="none" stroke="#7c3aed" stroke-width="1.8" stroke-linejoin="round" stroke-dasharray="4,2"/>${hist.map((v,i)=>`<circle cx="${px(i)}" cy="${py(v)}" r="2.2" fill="#2563eb"/>`).join("")}<text x="${pad.l}" y="${H-4}" font-size="8" fill="currentColor" opacity=".4">-${hist.length-1}d</text><text x="${fx}" y="${H-4}" text-anchor="middle" font-size="8" fill="currentColor" opacity=".8">今日</text><text x="${px(tot-1)}" y="${H-4}" text-anchor="end" font-size="8" fill="#a78bfa">+14d</text></svg>`;
+}
+function miniFC(kw,W=190,H=50){
+  const hist=kw.sparkline||[],fc=TFM.forecast(hist,kw.trendPct||0,7);if(!hist.length)return"";
+  const all=[...hist,...fc.map(f=>f.p90)],mx=Math.max(...all)*1.1||1,tot=hist.length+fc.length;
+  const px=i=>(i/(tot-1))*W,py=v=>H-(v/mx)*(H-4)-2;
+  const p90=`${px(hist.length-1)},${py(hist[hist.length-1])} `+fc.map((f,i)=>`${px(hist.length+i)},${py(f.p90)}`).join(" ");
+  const p10=fc.map((f,i)=>`${px(hist.length+i)},${py(f.p10)}`).reverse().join(" ")+` ${px(hist.length-1)},${py(hist[hist.length-1])}`;
+  const hl=hist.map((v,i)=>`${px(i)},${py(v)}`).join(" "),fl=`${px(hist.length-1)},${py(hist[hist.length-1])} `+fc.map((f,i)=>`${px(hist.length+i)},${py(f.mean)}`).join(" ");
+  return`<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}"><polygon points="${p90} ${p10}" fill="#7c3aed" opacity=".12"/><polyline points="${hl}" fill="none" stroke="#2563eb" stroke-width="1.5" stroke-linejoin="round"/><polyline points="${fl}" fill="none" stroke="#7c3aed" stroke-width="1.5" stroke-linejoin="round" stroke-dasharray="3,2"/></svg>`;
+}
+
+// ══ Cards ════════════════════════════════════════════════════
+function buildCard(kw, mx, rank){
+  const col = RC[kw.region]||"#888";
+  const idx = DATA.indexOf(kw);
+  const act = selKw && selKw.keyword === kw.keyword;
+  const sig = TFM.signal(kw.sparkline||[], kw.trendPct||0);
+  const fcs = TFM.fcScore(kw.sparkline||[], kw.trendPct||0);
+  const pct = Math.round(((kw.buzzScore||0)/(mx||1))*100);
+  const rk  = rank<=3 ? `class="kc-rank r${rank}"` : `class="kc-rank"`;
+  const rkTxt = rank<=3 ? ["🥇","🥈","🥉"][rank-1] : `#${rank}`;
+
+  return `<div class="kc${act?" on":""}" onclick="selCard(${idx})" style="--stripe:${col}">
+    <div class="kc-stripe" style="background:${col}"></div>
+    <div ${rk}>${rkTxt}</div>
+    <div class="kc-body">
+      <div class="kc-head">
+        <div class="kc-left">
+          <div class="ktit">${kw.keyword}</div>
+          <div class="kc-tags">
+            <span class="tag" style="background:${col}22;color:${col}">${kw.region}</span>
+            ${kw.isReal?'<span class="rbadge">実データ</span>':""}
+            <span style="font-size:9px;color:var(--text3)">${kw.platform||""}</span>
+          </div>
+          <div class="kmeta">${kw.industry||""} · ${kw.period||""}</div>
+        </div>
+        <div class="kc-right">
+          <div class="kc-trend">${tb(kw.trendPct||0)}</div>
+          <div class="kc-sig" style="color:${sig.color}">${sig.label}</div>
+        </div>
+      </div>
+      <div class="kc-bar-wrap">
+        <div class="kc-bar-label">
+          <span class="kc-bar-name">バズスコア</span>
+          <span class="kc-bar-val">${(kw.buzzScore||0).toLocaleString()}</span>
+        </div>
+        <div class="bb"><div class="bf" style="width:${pct}%;background:${col}"></div></div>
+      </div>
+      <div class="kc-stats">
+        <div class="kc-stat-item">
+          <span class="kc-stat-label">💬 コメント</span>
+          <span class="kc-stat-val">${(kw.comments||0).toLocaleString()}</span>
+        </div>
+        <div class="kc-stat-item">
+          <span class="kc-stat-label">↗ シェア</span>
+          <span class="kc-stat-val">${(kw.shares||0).toLocaleString()}</span>
+        </div>
+        <div class="kc-stat-item">
+          <span class="kc-stat-label">⬡ 予測スコア</span>
+          <span class="kc-fc-val">${fcs.toLocaleString()}</span>
+        </div>
+        <div style="width:68px">${sparkSVG(kw.sparkline, col)}</div>
+      </div>
+    </div>
+  </div>`;
+}
+function buildDetail(kw){
+  const col=RC[kw.region]||"#888",fc=TFM.forecast(kw.sparkline||[],kw.trendPct||0,14),sig=TFM.signal(kw.sparkline||[],kw.trendPct||0),peak=TFM.peak(fc),fcs=TFM.fcScore(kw.sparkline||[],kw.trendPct||0);
+  const srcs=(kw.sources||[]).map(s=>`<div class="src"><div style="display:flex;justify-content:space-between;margin-bottom:3px;flex-wrap:wrap;gap:2px"><span style="font-size:11px;font-weight:500;flex:1">${s.name||""}</span><span class="tag" style="background:${col}20;color:${col}">${s.region||""}</span></div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">${s.publisher||""}${s.date?" · "+s.date:""}${s.author?" · "+s.author:""}</div>${s.url?`<a class="sl" href="${s.url}" target="_blank">↗ ${s.url}</a>`:""}<div style="font-size:10px;color:var(--text2);margin-top:2px">${s.summary||""}</div></div>`).join("");
+  return`<div style="display:flex;justify-content:space-between;margin-bottom:11px"><div><div style="font-size:14px;font-weight:500">${kw.keyword}${kw.isReal?'<span class="rbadge">実データ</span>':""}</div><div style="font-size:10px;color:var(--text2);margin-top:1px">${kw.industry||""} · ${kw.region||""} · ${kw.platform||""}</div></div><button onclick="closeD()" style="font-size:11px;padding:3px 8px;background:transparent;border:.5px solid var(--border2);border-radius:var(--r);cursor:pointer;color:var(--text2)">×</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:11px"><div class="mc"><div class="ml">バズスコア</div><div style="font-size:14px;font-weight:500;margin-top:2px">${(kw.buzzScore||0).toLocaleString()}</div></div><div class="mc"><div class="ml">トレンド</div><div style="font-size:14px;font-weight:500;margin-top:2px">${tb(kw.trendPct||0)}</div></div><div class="mc" style="background:var(--purple-bg);border:.5px solid var(--purple-border)"><div class="ml" style="color:var(--purple)">7日予測スコア</div><div style="font-size:14px;font-weight:500;margin-top:2px;color:var(--purple)">${fcs.toLocaleString()}</div></div><div class="mc" style="background:var(--purple-bg);border:.5px solid var(--purple-border)"><div class="ml" style="color:var(--purple)">予測シグナル</div><div style="font-size:11px;font-weight:600;margin-top:3px;color:${sig.color}">${sig.label}</div></div></div>
+  <div style="margin-bottom:10px"><div class="slab" style="color:var(--purple)">TimesFM 予測チャート（14日先）</div><div class="fc-wrap">${fcSVG(kw)}</div>${peak?`<div class="fc-info"><div class="fi-ti">予測サマリー</div><div class="fi-r"><span>ピーク日</span><span class="fi-v">+${peak.day}日後 (${peak.value.toLocaleString()})</span></div><div class="fi-r"><span>7日後P50</span><span class="fi-v">${Math.round(fc[6]?.mean||0).toLocaleString()}</span></div><div class="fi-r"><span>P10–P90</span><span class="fi-v">${Math.round(fc[6]?.p10||0).toLocaleString()} – ${Math.round(fc[6]?.p90||0).toLocaleString()}</span></div><div class="fi-r"><span>14日後P50</span><span class="fi-v">${Math.round(fc[13]?.mean||0).toLocaleString()}</span></div></div>`:""}</div>
+  <div style="margin-bottom:9px"><div class="slab">話題期間</div><div style="font-size:11px">${kw.dateRange||kw.period||""}</div></div>
+  <div style="margin-bottom:9px"><div class="slab">なぜバズったか</div><div style="font-size:11px;line-height:1.7">${kw.reason||""}</div></div>
+  <div style="margin-bottom:9px"><div class="slab">きっかけ・元ネタ</div><div style="font-size:11px;line-height:1.7">${kw.trigger||""}</div></div>
+  <div style="margin-bottom:9px"><div class="slab">ソース (${(kw.sources||[]).length}件)</div>${srcs||'<div style="font-size:10px;color:var(--text2)">取得なし</div>'}</div>
+  <div><div class="slab">今後の予測</div><div style="font-size:11px;line-height:1.7;font-style:italic">${kw.forecast||""}</div></div>`;
+}
+function selCard(idx){const kw=DATA[idx];if(selKw&&selKw.keyword===kw.keyword){closeD();return;}selKw=kw;renderCards();const dp=document.getElementById("dp");dp.style.display="block";dp.innerHTML=buildDetail(kw);document.getElementById("cw").classList.add("hd");document.getElementById("kg").classList.add("hd");}
+function closeD(){selKw=null;document.getElementById("dp").style.display="none";document.getElementById("cw").classList.remove("hd");document.getElementById("kg").classList.remove("hd");renderCards();}
+function getSorted(){return[...DATA].sort((a,b)=>{if(sortK==="buzz")return(b.buzzScore||0)-(a.buzzScore||0);if(sortK==="trend")return(b.trendPct||0)-(a.trendPct||0);return TFM.fcScore(b.sparkline||[],b.trendPct||0)-TFM.fcScore(a.sparkline||[],a.trendPct||0)});}
+function renderCards(){
+  const sorted = getSorted();
+  const mx = Math.max(...DATA.map(k=>k.buzzScore||0),1);
+  const kg = document.getElementById("kg");
+  kg.innerHTML = sorted.map((kw,i) => buildCard(kw, mx, i+1)).join("");
+  // staggered animation delay
+  kg.querySelectorAll(".kc").forEach((el,i)=>{ el.style.animationDelay = `${i*30}ms`; });
+}
+function renderForecast(){
+  const ranked=[...DATA].sort((a,b)=>TFM.fcScore(b.sparkline||[],b.trendPct||0)-TFM.fcScore(a.sparkline||[],a.trendPct||0)),mxF=TFM.fcScore(ranked[0]?.sparkline||[],ranked[0]?.trendPct||0)||1;
+  document.getElementById("fc-grid").innerHTML=ranked.map((kw,i)=>{const col=RC[kw.region]||"#888",fcs=TFM.fcScore(kw.sparkline||[],kw.trendPct||0),sig=TFM.signal(kw.sparkline||[],kw.trendPct||0),fc=TFM.forecast(kw.sparkline||[],kw.trendPct||0,14);return`<div class="fc-card${i<3?" top3":""}"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><div><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="font-size:13px;font-weight:500">${["🥇","🥈","🥉"][i]||""} ${kw.keyword}</span><span class="tag" style="background:${col}20;color:${col}">${kw.region}</span></div><div style="font-size:10px;color:var(--text2);margin-top:1px">${kw.industry||""} · ${kw.platform||""}</div></div><div style="text-align:right"><div style="font-size:13px;font-weight:600;color:var(--purple)">${fcs.toLocaleString()}</div><div style="font-size:9px;font-weight:600;color:${sig.color}">${sig.label}</div></div></div><div class="fc-bar-bg"><div class="fc-bar-fill" style="width:${Math.round((fcs/mxF)*100)}%"></div></div><div style="margin-top:7px">${miniFC(kw)}</div><div style="display:flex;gap:10px;margin-top:4px;font-size:9px;color:var(--text2)"><span>+7d: <b>${Math.round(fc[6]?.mean||0).toLocaleString()}</b></span><span>+14d: <b>${Math.round(fc[13]?.mean||0).toLocaleString()}</b></span><span>P90: <b>${Math.round(fc[6]?.p90||0).toLocaleString()}</b></span></div></div>`;}).join("");
+}
+function renderViz(){
+  const top8=getSorted().slice(0,8),W1=460,H1=155,p1={t:8,r:8,b:26,l:36},cW1=W1-p1.l-p1.r,cH1=H1-p1.t-p1.b,N=7;
+  const mxV=Math.max(...top8.flatMap(k=>k.sparkline||[0]))||1,px1=i=>p1.l+(i/(N-1))*cW1,py1=v=>p1.t+cH1-(v/mxV)*cH1;
+  const yt1=[0,.5,1].map(r=>{const v=r*mxV;return`<text x="${p1.l-3}" y="${py1(v)+3}" text-anchor="end" font-size="8" fill="currentColor" opacity=".4">${Math.round(v).toLocaleString()}</text><line x1="${p1.l}" y1="${py1(v)}" x2="${p1.l+cW1}" y2="${py1(v)}" stroke="currentColor" stroke-width=".4" opacity=".1"/>`}).join("");
+  const xt1=Array.from({length:N},(_,i)=>`<text x="${px1(i)}" y="${H1-6}" text-anchor="middle" font-size="8" fill="currentColor" opacity=".4">-${N-1-i}d</text>`).join("");
+  const lines=top8.map((kw,ci)=>{const sp=kw.sparkline||[];if(sp.length<2)return"";const col=PAL[ci%PAL.length],pts=sp.slice(0,N).map((v,i)=>`${px1(i)},${py1(v)}`).join(" "),lv=sp[Math.min(N-1,sp.length-1)];return`<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round" opacity=".85"/><circle cx="${px1(Math.min(N-1,sp.length-1))}" cy="${py1(lv)}" r="2.5" fill="${col}"/><text x="${px1(Math.min(N-1,sp.length-1))+5}" y="${py1(lv)+3}" font-size="8" fill="${col}">${kw.keyword.slice(0,6)}</text>`;}).join("");
+  document.getElementById("v-timeline").innerHTML=`<div class="sc-title">📅 バズ推移タイムライン（上位8件）</div><svg viewBox="0 0 ${W1} ${H1}" width="100%" style="overflow:visible">${yt1}${xt1}${lines}</svg>`;
+  const rmap={};DATA.forEach(k=>{if(!rmap[k.region])rmap[k.region]={s:0};rmap[k.region].s+=(k.buzzScore||0);});
+  const re=Object.entries(rmap).map(([r,d])=>({r,s:d.s})),mxS=Math.max(...re.map(e=>e.s),1);
+  const W2=380,H2=200,cx2=W2/2,cy2=H2/2,rad2=75;
+  const bubs=re.map((e,i)=>{const a=(i/re.length)*Math.PI*2-Math.PI/2,r=Math.max(14,Math.sqrt(e.s/mxS)*55),bx=cx2+Math.cos(a)*rad2,by=cy2+Math.sin(a)*rad2,col=RC[e.r]||"#888";return`<circle cx="${bx}" cy="${by}" r="${r}" fill="${col}" opacity=".2" stroke="${col}" stroke-width="1.5"/><text x="${bx}" y="${by-2}" text-anchor="middle" font-size="9" fill="${col}" font-weight="600">${e.r}</text><text x="${bx}" y="${by+10}" text-anchor="middle" font-size="8" fill="${col}" opacity=".8">${e.s.toLocaleString()}</text>`;}).join("");
+  document.getElementById("v-region").innerHTML=`<div class="sc-title">🌏 地域別バズ分布（バブルサイズ=合計バズ）</div><svg viewBox="0 0 ${W2} ${H2}" width="100%">${bubs}</svg>`;
+  const W3=400,H3=180,p3={t:8,r:16,b:28,l:36},cW3=W3-p3.l-p3.r,cH3=H3-p3.t-p3.b;
+  const mxB3=Math.max(...DATA.map(k=>k.buzzScore||0),1),mxC=Math.max(...DATA.map(k=>k.comments||0),1),mxSh=Math.max(...DATA.map(k=>k.shares||0),1);
+  const d3=DATA.map((kw,i)=>{const bx=p3.l+(kw.buzzScore||0)/mxB3*cW3,by=p3.t+cH3-(kw.comments||0)/mxC*cH3,r=Math.max(4,Math.sqrt((kw.shares||0)/mxSh)*16),col=PAL[i%PAL.length];return`<circle cx="${bx}" cy="${by}" r="${r}" fill="${col}" opacity=".5" stroke="${col}" stroke-width="1"><title>${kw.keyword}</title></circle>`;}).join("");
+  const ax3=`<line x1="${p3.l}" y1="${p3.t}" x2="${p3.l}" y2="${p3.t+cH3}" stroke="currentColor" stroke-width=".5" opacity=".3"/><line x1="${p3.l}" y1="${p3.t+cH3}" x2="${p3.l+cW3}" y2="${p3.t+cH3}" stroke="currentColor" stroke-width=".5" opacity=".3"/><text x="${p3.l+cW3/2}" y="${H3-4}" text-anchor="middle" font-size="8" fill="currentColor" opacity=".5">バズスコア →</text><text x="8" y="${p3.t+cH3/2}" font-size="8" fill="currentColor" opacity=".5" transform="rotate(-90,8,${p3.t+cH3/2})">コメント →</text>`;
+  document.getElementById("v-volume").innerHTML=`<div class="sc-title">📊 バズ × コメント × シェア数散布図</div><svg viewBox="0 0 ${W3} ${H3}" width="100%">${ax3}${d3}</svg>`;
+  const pmap={};DATA.forEach(k=>{const p=k.platform||"その他";pmap[p]=(pmap[p]||0)+(k.buzzScore||0);});
+  const pe=Object.entries(pmap).sort((a,b)=>b[1]-a[1]).slice(0,7),tot4=pe.reduce((s,[,v])=>s+v,0)||1;
+  const W4=260,H4=150,cx4=90,cy4=75,oR=62,iR=32;let ang=-Math.PI/2;
+  const segs=pe.map(([name,val],i)=>{const sw=(val/tot4)*Math.PI*2,a1=ang,a2=ang+sw,x1=cx4+oR*Math.cos(a1),y1=cy4+oR*Math.sin(a1),x2=cx4+oR*Math.cos(a2),y2=cy4+oR*Math.sin(a2),xi1=cx4+iR*Math.cos(a1),yi1=cy4+iR*Math.sin(a1),xi2=cx4+iR*Math.cos(a2),yi2=cy4+iR*Math.sin(a2),lg=sw>Math.PI?1:0,col=PC[name]||PAL[i%PAL.length];ang+=sw;return`<path d="M${xi1},${yi1} L${x1},${y1} A${oR},${oR} 0 ${lg},1 ${x2},${y2} L${xi2},${yi2} A${iR},${iR} 0 ${lg},0 ${xi1},${yi1} Z" fill="${col}" opacity=".85"/>`;}).join("");
+  const leg=pe.map(([name,val],i)=>{const col=PC[name]||PAL[i%PAL.length],pct=Math.round((val/tot4)*100);return`<div style="display:flex;align-items:center;gap:4px;font-size:9px;margin-bottom:3px"><div style="width:8px;height:8px;border-radius:2px;background:${col};flex-shrink:0"></div><span>${name}</span><span style="color:var(--text2)">${pct}%</span></div>`;}).join("");
+  document.getElementById("v-platform").innerHTML=`<div class="sc-title">📱 プラットフォーム別バズシェア</div><div style="display:flex;align-items:center;gap:8px"><svg viewBox="0 0 ${W4} ${H4}" width="190" height="150">${segs}</svg><div style="flex:1">${leg}</div></div>`;
+  const srt=getSorted(),mxBz=srt[0]?.buzzScore||1;
+  document.getElementById("v-cloud").innerHTML=`<div class="sc-title">☁️ キーワードクラウド（文字サイズ=バズ規模）</div><div class="cloud-wrap">${srt.map((kw,i)=>{const sz=Math.max(10,Math.round(10+(kw.buzzScore/mxBz)*18)),col=PAL[i%PAL.length];return`<span style="font-size:${sz}px;color:${col};font-weight:${sz>18?600:400};cursor:default;line-height:1.6;padding:1px 3px" title="${kw.keyword}: ${(kw.buzzScore||0).toLocaleString()}">${kw.keyword}</span>`;}).join(" ")}</div>`;
+  const W6=400,H6=180,p6={t:8,r:16,b:28,l:36},cW6=W6-p6.l-p6.r,cH6=H6-p6.t-p6.b;
+  const mxB6=Math.max(...DATA.map(k=>k.buzzScore||0),1),mnT=Math.min(...DATA.map(k=>k.trendPct||0))-5,mxT=Math.max(...DATA.map(k=>k.trendPct||0))+5;
+  const px6=v=>p6.l+((v-mnT)/(mxT-mnT))*cW6,py6=v=>p6.t+cH6-(v/mxB6)*cH6,zx=px6(0);
+  const d6=DATA.map(kw=>{
+    const col=kw.trendPct>20?"#16a34a":kw.trendPct<-20?"#dc2626":"#d97706";
+    const bx=px6(kw.trendPct||0), by=py6(kw.buzzScore||0);
+    const label=kw.keyword.length>5?kw.keyword.slice(0,5)+"…":kw.keyword;
+    // label position: avoid going off right edge
+    const labelX = bx > p6.l+cW6-40 ? bx-3 : bx+8;
+    const anchor  = bx > p6.l+cW6-40 ? "end" : "start";
+    return`<g>
+      <circle cx="${bx}" cy="${by}" r="7" fill="${col}" opacity=".7" stroke="${col}" stroke-width="1.5">
+        <title>${kw.keyword}: トレンド${kw.trendPct||0}% / バズ${(kw.buzzScore||0).toLocaleString()}</title>
+      </circle>
+      <text x="${labelX}" y="${by+4}" font-size="9" fill="${col}" font-weight="600" text-anchor="${anchor}">${label}</text>
+    </g>`;
+  }).join("");
+  // Quadrant labels
+  // (quadrant labels embedded in ax6 below)
+  const ax6=`<line x1="${p6.l}" y1="${p6.t}" x2="${p6.l}" y2="${p6.t+cH6}" stroke="currentColor" stroke-width=".5" opacity=".3"/>
+    <line x1="${p6.l}" y1="${p6.t+cH6}" x2="${p6.l+cW6}" y2="${p6.t+cH6}" stroke="currentColor" stroke-width=".5" opacity=".3"/>
+    <line x1="${zx}" y1="${p6.t}" x2="${zx}" y2="${p6.t+cH6}" stroke="currentColor" stroke-width=".5" stroke-dasharray="4,3" opacity=".3"/>
+    <text x="${px6(-1)}" y="${p6.t+cH6+16}" font-size="8" fill="currentColor" opacity=".4">↓ 下降</text>
+    <text x="${px6(0)}" y="${p6.t+cH6+16}" text-anchor="middle" font-size="8" fill="currentColor" opacity=".4">0%</text>
+    <text x="${px6(mxT-2)}" y="${p6.t+cH6+16}" text-anchor="end" font-size="8" fill="currentColor" opacity=".4">急上昇 ↑</text>
+    <text x="10" y="${p6.t+cH6/2}" font-size="8" fill="currentColor" opacity=".4" transform="rotate(-90,10,${p6.t+cH6/2})">バズスコア →</text>`;
+  // Legend
+  const legend6=`<g transform="translate(${p6.l+4},${p6.t+4})">
+    <circle cx="5" cy="5" r="5" fill="#16a34a" opacity=".7"/><text x="14" y="9" font-size="8" fill="#16a34a">急上昇(+20%超)</text>
+    <circle cx="5" cy="18" r="5" fill="#d97706" opacity=".7"/><text x="14" y="22" font-size="8" fill="#d97706">横ばい(±20%)</text>
+    <circle cx="5" cy="31" r="5" fill="#dc2626" opacity=".7"/><text x="14" y="35" font-size="8" fill="#dc2626">下降(-20%未満)</text>
+  </g>`;
+  document.getElementById("v-scatter").innerHTML=`<div class="sc-title">↗ バズスコア vs トレンド変化率（各点 = 1キーワード）</div><svg viewBox="0 0 ${W6} ${H6+20}" width="100%" style="overflow:visible">${ax6}${legend6}${d6}</svg>`;
+
+  // ── Heatmap → わかりやすいランキング比較表に置き換え ────────
+  const sorted_for_hm = [...DATA].sort((a,b)=>(b.buzzScore||0)-(a.buzzScore||0));
+  const maxBuzz_hm = sorted_for_hm[0]?.buzzScore || 1;
+  // Group by region
+  const regionGroups = {};
+  sorted_for_hm.forEach(k=>{ const r=k.region||"全世界"; if(!regionGroups[r]) regionGroups[r]=[]; regionGroups[r].push(k); });
+  const hmRows = Object.entries(regionGroups).sort((a,b)=>b[1].reduce((s,k)=>s+(k.buzzScore||0),0)-a[1].reduce((s,k)=>s+(k.buzzScore||0),0)).slice(0,6).map(([region, kws])=>{
+    const col = RC[region]||"#888";
+    const topKws = kws.slice(0,3);
+    return `<div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px">
+        <span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;display:inline-block"></span>
+        <span style="font-size:12px;font-weight:600">${region}</span>
+        <span style="font-size:10px;color:var(--text3)">${kws.length}件のキーワード</span>
+      </div>
+      ${topKws.map((kw,i)=>{
+        const pct=Math.round(((kw.buzzScore||0)/maxBuzz_hm)*100);
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:10px;color:var(--text3);width:14px;text-align:right">${i+1}</span>
+          <span style="font-size:11px;font-weight:500;min-width:80px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${kw.keyword}">${kw.keyword}</span>
+          <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:${col};border-radius:4px;opacity:.8"></div>
+          </div>
+          <span style="font-size:10px;font-weight:600;color:${col};min-width:42px;text-align:right">${(kw.buzzScore||0).toLocaleString()}</span>
+          <span style="font-size:9px;color:var(--text3);min-width:28px">${tb(kw.trendPct||0)}</span>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }).join("");
+  document.getElementById("v-heatmap").innerHTML=`
+    <div class="sc-title">🌍 地域別 バズランキング</div>
+    <div style="font-size:10px;color:var(--text2);margin-bottom:12px;background:var(--bg2);border-radius:var(--r);padding:7px 10px">
+      各地域のバズ上位3キーワードをバーで比較。バーの長さ=バズスコアの大きさ（全体最大値 ${maxBuzz_hm.toLocaleString()} を100%とする）
+    </div>
+    ${hmRows}`;
+}
+function renderStats(){
+  const rmap={},imap={},pmap={};
+  DATA.forEach(k=>{rmap[k.region]=(rmap[k.region]||0)+(k.buzzScore||0);imap[k.subIndustry||k.industry]=(imap[k.subIndustry||k.industry]||0)+(k.buzzScore||0);pmap[k.platform||"その他"]=(pmap[k.platform||"その他"]||0)+(k.buzzScore||0);});
+  function hbars(data,cfn){const mx=Math.max(...data.map(d=>d.v),1);return data.map(d=>`<div class="hb-row"><div class="hb-lr"><span>${d.k}</span><span style="color:var(--text2)">${d.v.toLocaleString()}</span></div><div class="hb-bg"><div class="hb-fill" style="width:${Math.round((d.v/mx)*100)}%;background:${cfn(d.k)}"></div></div></div>`).join("");}
+  document.getElementById("s-region").innerHTML=`<div class="sc-title">地域別バズスコア</div>${hbars(Object.entries(rmap).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v),k=>RC[k]||"#888")}`;
+  document.getElementById("s-ind").innerHTML=`<div class="sc-title">業種別バズスコア</div>${hbars(Object.entries(imap).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v).slice(0,8),()=>"#2563eb")}`;
+  document.getElementById("s-plat").innerHTML=`<div class="sc-title">プラットフォーム別</div>${hbars(Object.entries(pmap).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v).slice(0,8),k=>PC[k]||"#888")}`;
+  const tB={"急落":0,"下降":0,"横ばい":0,"上昇":0,"急上昇":0},tC={"急落":"#dc2626","下降":"#f97316","横ばい":"#888","上昇":"#22c55e","急上昇":"#16a34a"};
+  DATA.forEach(k=>{const t=k.trendPct||0;if(t<=-50)tB["急落"]++;else if(t<-10)tB["下降"]++;else if(t<=10)tB["横ばい"]++;else if(t<=50)tB["上昇"]++;else tB["急上昇"]++;});
+  document.getElementById("s-tdist").innerHTML=`<div class="sc-title">トレンド分布</div>${hbars(Object.entries(tB).filter(([,v])=>v>0).map(([k,v])=>({k,v})),k=>tC[k]||"#888")}`;
+  const top10=[...DATA].sort((a,b)=>(b.trendPct||0)-(a.trendPct||0)).slice(0,10);
+  document.getElementById("s-top10").innerHTML=`<div class="sc-title">急上昇 TOP10</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:5px">${top10.map(k=>`<div style="background:var(--bg2);border-radius:var(--r);padding:6px 8px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:11px;font-weight:500">${k.keyword}</div><div style="font-size:9px;color:var(--text2)">${k.region}</div></div>${tb(k.trendPct||0)}</div>`).join("")}</div>`;
+}
+function renderMetrics(){
+  const total=DATA.reduce((s,k)=>s+(k.buzzScore||0),0),rising=DATA.filter(k=>(k.trendPct||0)>20).length;
+  const top=[...DATA].sort((a,b)=>TFM.fcScore(b.sparkline||[],b.trendPct||0)-TFM.fcScore(a.sparkline||[],a.trendPct||0))[0];
+  const mxF=top?TFM.fcScore(top.sparkline||[],top.trendPct||0):0,real=DATA.filter(k=>k.isReal).length;
+  document.getElementById("mrow").innerHTML=[
+    {l:"検出",v:DATA.length},{l:"急上昇",v:rising},{l:"総バズ",v:Math.round(total/1000)+"k"},
+    {l:"予測No.1",v:mxF.toLocaleString(),p:true},{l:"実データ",v:real+"件"},
+  ].map(m=>`<div class="mc"${m.p?' style="background:var(--purple-bg);border:.5px solid var(--purple-border)"':""}><div class="ml"${m.p?' style="color:var(--purple)"':''}>${m.l}</div><div class="mv"${m.p?' style="color:var(--purple)"':''}>${m.v}</div></div>`).join("");
+}
+function ss3(s){
+  sortK=s;
+  const labels={"buzz":"バズスコア順","trend":"急上昇率順","forecast":"予測スコア順"};
+  ["buzz","trend","forecast"].forEach(id=>{const b=document.getElementById("so-"+id);if(b)b.classList.toggle("on",id===s)});
+  // flash sort label
+  const note = document.getElementById("sort-note");
+  if(note){ note.textContent = "▸ "+labels[s]; note.style.opacity="1"; setTimeout(()=>note.style.opacity="0",1500); }
+  renderCards();
+}
+function sv(v){curView=v;["cards","forecast","viz","stats"].forEach(id=>{const b=document.getElementById("tb-"+id);if(b)b.classList.toggle("on",id===v)});
+  document.getElementById("cards-view").style.display=v==="cards"?"block":"none";
+  document.getElementById("forecast-view").style.display=v==="forecast"?"block":"none";
+  document.getElementById("viz-view").style.display=v==="viz"?"block":"none";
+  document.getElementById("stats-view").style.display=v==="stats"?"block":"none";
+  if(v==="forecast")renderForecast();if(v==="viz")renderViz();if(v==="stats")renderStats();
+}
+
+// ══ Steps + timer ════════════════════════════════════════════
+function initSteps(sel){sel.forEach(q=>{stepS[q.id]="idle";stepD[q.id]=""});renderSG(sel);}
+function setStep(id,state,det,sel){stepS[id]=state;if(det!==undefined)stepD[id]=det;renderSG(sel);}
+function renderSG(sel){document.getElementById("sg").innerHTML=sel.map(q=>{const st=stepS[q.id]||"idle",icon=st==="active"?`<div class="spin"></div>`:st==="done"?"✓":q.pl[0];return`<div class="st2 ${st}"><div class="si ${st}">${icon}</div><div><div class="st-ti">${q.la}</div>${stepD[q.id]?`<div class="st-su">${stepD[q.id]}</div>`:""}</div></div>`;}).join("");}
+function startElapsed(){let s=0;clearInterval(elapsedTimer);clearInterval(progTimer);elapsedTimer=setInterval(()=>{s++;document.getElementById("elapsed").textContent=`経過 ${s}秒 — web_search 実行中...`;},1000);progTimer=setInterval(()=>{document.getElementById("progbar").style.width=Math.min(95,Math.round((s/120)*100))+"%";},1000);}
+function stopElapsed(){clearInterval(elapsedTimer);clearInterval(progTimer);document.getElementById("progbar").style.width="100%";document.getElementById("elapsed").textContent="完了！";}
+
+// ══ Main run ═════════════════════════════════════════════════
+async function run(){
+  if(isFileProtocol()){document.getElementById("file-blocker").classList.add("show");return;}
+
+  const endpoint = isLocalhost() ? "/proxy" : "https://api.anthropic.com/v1/messages";
+  const headers  = {"Content-Type":"application/json"};
+
+  // Claude.ai 環境以外でAPIキーが未設定の場合
+  if(!isLocalhost() && !API_KEY){
+    if(!apiPanelOpen) toggleApiPanel();
+    document.getElementById("api-key-input").focus();
+    return;
+  }
+  if(!isLocalhost() && API_KEY) headers["x-api-key"] = API_KEY;
+
+  const sel=QD.filter(q=>q.on);
+  if(!sel.length){alert("クエリを1つ以上選択してください");return;}
+
+  const indEl=document.getElementById("si"),subEl=document.getElementById("ss");
+  const indL=indEl.value?indEl.selectedOptions[0].text:"すべての業界";
+  const subL=subEl.value&&subEl.value!=="all"?subEl.selectedOptions[0].text:"すべての業種";
+  const regL=document.getElementById("sr").selectedOptions[0].text;
+  const per=document.getElementById("sp").value,df=document.getElementById("df").value,dt=document.getElementById("dt").value;
+  const perL=per==="custom"?`${df}〜${dt}`:`直近${per}日間`;
+  const perEn={"7":"past week","14":"past 2 weeks","30":"past month","90":"past 3 months"}[per]||`${df} to ${dt}`;
+  const target=subL!=="すべての業種"?`${indL} > ${subL}`:indL;
+
+  document.getElementById("empty").style.display="none";document.getElementById("res").style.display="none";document.getElementById("err").style.display="none";
+  document.getElementById("pw").style.display="block";
+  document.getElementById("pt").textContent=`🔍 ${target} × ${regL} × ${perL} を検索中...`;
+  document.getElementById("pt-note").textContent=`${sel.length}クエリ選択中 — 通常1〜3分かかります`;
+  document.getElementById("run-btn").disabled=true;
+  document.getElementById("rsub").textContent=`${target} / ${regL} / ${perL} — ${sel.length}クエリ`;
+  initSteps(sel);startElapsed();
+
+  let si=0;setStep(sel[0].id,"active","検索開始...",sel);
+  const ticker=setInterval(()=>{if(si<sel.length-1){setStep(sel[si].id,"done","完了",sel);si++;setStep(sel[si].id,"active","検索中...",sel);}},Math.max(2000,20000/sel.length));
+
+  const tpl={"q01":`X(Twitter) "${target}" トレンド ハッシュタグ ${perL}`,"q02":`Google Trends "${target}" 急上昇 ${regL} 2026年4月`,"q03":`Reddit "${target}" trending ${perEn}`,"q04":`YouTube "${target}" 急上昇 トレンド動画 ${perL}`,"q05":`TikTok "${target}" バイラル ハッシュタグ ${perL}`,"q06":`Instagram reels "${target}" trending ${perEn}`,"q07":`"${target}" ニュース 話題 ${perL} site:nhk.or.jp OR site:yahoo.co.jp OR site:nikkei.com`,"q08":`"${target}" viral news ${perEn} site:bbc.com OR site:reuters.com OR site:bloomberg.com`,"q09":`微博 抖音 "${indL}" 热搜 热门 ${perL}`,"q10":`"${target}" trending Asia Korea India ${perEn}`,"q11":`"${target}" trending Europe ${perEn}`,"q12":`"${target}" trending Latin America Africa ${perEn}`,"q13":`"${target}" search volume trend growth April 2026`,"q14":`"${target}" industry news blog analysis ${perEn}`,"q15":`"${target}" government statistics press release official ${perL}`};
+  const sl=sel.map((q,i)=>`${i+1}. ${tpl[q.id]||q.la+" "+target+" "+perL}`).join("\n");
+
+  // ── プロンプト: JSON出力を徹底的に強制 ──────────────────
+  const prompt=
+`あなたはSNS・ニュース・トレンド分析の専門家です。
+web_search ツールを使って下記の検索をすべて実施し、バズキーワードを収集してください。
+
+【条件】業界: ${indL} / 業種: ${subL} / 地域: ${regL} / 期間: ${perL}（基準日: 2026年4月6日）
+
+【実施する検索 ${sel.length}件】
+${sl}
+
+収集したデータをもとに、バズったキーワード・トピックを10件抽出してください。
+
+★★★ 出力ルール（必ず守ること）★★★
+- 出力はJSON配列のみ。説明文・前置き・コードブロック記号（\`\`\`）は一切不要
+- 最初の文字は [ 、最後の文字は ] にすること
+- 各フィールドのキーはダブルクォートで囲む
+- 文字列内にダブルクォートを使う場合は \\" でエスケープする
+
+[{"keyword":"日本語キーワード","industry":"${indL}","subIndustry":"業種","region":"日本","platform":"X","period":"2026年3月末〜4月","dateRange":"詳細","buzzScore":5000,"trendPct":25,"comments":1200,"shares":800,"sparkline":[1000,2000,3000,4000,5000,5500,6000],"isReal":true,"reason":"理由2文","trigger":"きっかけ","forecast":"予測","sources":[{"name":"タイトル","publisher":"メディア","date":"2026-04-01","author":"著者","region":"日本","url":"https://example.com","summary":"要約"}]}]`;
+
+  // ── ロバストなJSON抽出関数 ────────────────────────────────
+  function robustExtractJSON(text) {
+    if(!text) return null;
+    // Step1: markdownコードブロックを除去
+    let clean = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+
+    // Step2: 括弧カウントで完全な配列を探す（最長優先）
+    let depth=0, start=-1, best=null;
+    for(let i=0; i<clean.length; i++){
+      if(clean[i]==="["){
+        if(depth===0) start=i;
+        depth++;
+      } else if(clean[i]==="]"){
+        depth--;
+        if(depth===0 && start!==-1){
+          const candidate=clean.slice(start, i+1);
+          try{
+            const parsed=JSON.parse(candidate);
+            if(Array.isArray(parsed) && parsed.length>0) best=parsed;
+          }catch(e2){}
+          start=-1;
+        }
+      }
+    }
+    if(best) return best;
+
+    // Step3: 部分回収 - 途中で切れた場合も完全なオブジェクトだけ取り出す
+    const recovered=[];
+    depth=0; start=-1;
+    for(let i=0; i<clean.length; i++){
+      if(clean[i]==="{"){
+        if(depth===0) start=i;
+        depth++;
+      } else if(clean[i]==="}"){
+        depth--;
+        if(depth===0 && start!==-1){
+          try{
+            const obj=JSON.parse(clean.slice(start, i+1));
+            if(obj.keyword) recovered.push(obj);
+          }catch(e3){}
+          start=-1;
+        }
+      }
+    }
+    if(recovered.length>0){
+      console.warn(`[BuzzTracker] 部分回収: ${recovered.length}件のオブジェクトを救済`);
+      return recovered;
+    }
+    return null;
+  }
+
+  // ── fetch ────────────────────────────────────────────────
+  let res;
+  try{
+    res = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 16000,   // 増量: 長いレスポンスを切らさない
+        tools: [{type:"web_search_20250305", name:"web_search"}],
+        messages: [{role:"user", content:prompt}]
+      })
+    });
+  } catch(networkErr) {
+    clearInterval(ticker); stopElapsed();
+    document.getElementById("pw").style.display = "none";
+    const eb = document.getElementById("err");
+    eb.className = "err general";
+    eb.innerHTML = isLocalhost()
+      ? `<b>✗ サーバーに接続できません（Failed to fetch）</b><br>
+         1. server.py が起動しているか確認してください<br>
+         2. <code style="font-family:monospace;background:var(--bg3);padding:1px 5px;border-radius:3px">python server.py sk-ant-YOUR_KEY</code> を再実行してください`
+      : `<b>✗ API接続エラー</b><br>右上「⚙ API設定」からキーを再入力してください。<br>詳細: ${networkErr.message}`;
+    eb.style.display = "block";
+    document.getElementById("empty").style.display = "block";
+    document.getElementById("run-btn").disabled = false;
+    return;
+  }
+
+  try{
+    clearInterval(ticker); stopElapsed();
+
+    if(!res.ok){
+      let errMsg = `HTTP ${res.status}`;
+      try{ const errJson=await res.json(); errMsg=errJson.error?.message||errMsg; }catch(e2){}
+      throw new Error(errMsg);
+    }
+
+    const data = await res.json();
+    sel.forEach(q=>setStep(q.id,"done","完了",sel));
+
+    // 全テキストブロックを結合
+    const txt = (data.content||[]).map(b=>b.type==="text"?b.text:"").join("");
+    console.log("[BuzzTracker] Raw response length:", txt.length);
+    console.log("[BuzzTracker] Response preview:", txt.slice(0,300));
+
+    const parsed = robustExtractJSON(txt);
+    if(!parsed || parsed.length===0){
+      console.error("[BuzzTracker] Full response:", txt);
+      throw new Error(`JSON解析に失敗しました（レスポンス長: ${txt.length}文字）。クエリ数を3〜4件に減らして再試行してください。`);
+    }
+
+    DATA = parsed; selKw = null;
+    console.log(`[BuzzTracker] 取得成功: ${DATA.length}件`);
+    renderMetrics(); renderCards(); sv("cards"); closeD();
+    setTimeout(()=>{
+      document.getElementById("pw").style.display="none";
+      document.getElementById("res").style.display="block";
+    }, 400);
+
+  }catch(e){
+    stopElapsed();
+    document.getElementById("pw").style.display = "none";
+    const eb = document.getElementById("err");
+    const isTO = e.message && (e.message.includes("timed out")||e.message.includes("timeout")||e.message.includes("504")||e.message.includes("タイムアウト"));
+    eb.className = "err " + (isTO?"timeout":"general");
+    eb.innerHTML = isTO
+      ? `<b>⏱ タイムアウト</b><br>クエリ数を3〜4件以下に減らして再試行してください（現在: ${sel.length}件）`
+      : `<b>エラー:</b> ${e.message||"データ取得に失敗しました。"}`;
+    eb.style.display = "block";
+    document.getElementById("empty").style.display = "block";
+  }finally{
+    document.getElementById("run-btn").disabled = false;
+  }
+}
+</script>
+</body>
+</html>
